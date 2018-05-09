@@ -29,23 +29,25 @@ using IBM.Watson.DeveloperCloud.Connection;
 
 public class SpeechSandboxStreaming : MonoBehaviour
 {
-  
+
     public GameManager gameManager;
     public AudioClip sorryClip;
-    public List<AudioClip> helpClips; 
-    
-   
+    public List<AudioClip> helpClips;
+
+
 
     [SerializeField]
     private fsSerializer _serializer = new fsSerializer();
     private SpeechToText _speechToText;
     private Conversation _conversation;
+    private LanguageTranslator _language_translator;
+    private string _translationModel = "ja-en";
 
     private string stt_username = "";
     private string stt_password = "";
     // Change stt_url if different from below
     private string stt_url = "https://stream.watsonplatform.net/speech-to-text/api";
-     
+
     private string convo_username = "";
     private string convo_password = "";
     // Change convo_url if different from below
@@ -53,6 +55,11 @@ public class SpeechSandboxStreaming : MonoBehaviour
     // Change  _conversationVersionDate if different from below
     private string _conversationVersionDate = "2017-05-26";
     private string convo_workspaceId = "";
+
+    private string lang_username = "";
+    private string lang_password = "";
+    // Change lang_url if different from below
+    private string lang_url = "https://gateway.watsonplatform.net/language-translator/api";
 
     public Text ResultsField;
 
@@ -62,18 +69,22 @@ public class SpeechSandboxStreaming : MonoBehaviour
     private int _recordingBufferSize = 1;
     private int _recordingHZ = 22050;
 
-   
+
     void Start()
     {
         LogSystem.InstallDefaultReactors();
 
+
         //  Create credential and instantiate service
         Credentials stt_credentials = new Credentials(stt_username, stt_password, stt_url);
         Credentials convo_credentials = new Credentials(convo_username, convo_password, convo_url);
+	Credentials lang_credentials = new Credentials(lang_username, lang_password, lang_url);
 
         _speechToText = new SpeechToText(stt_credentials);
+	_speechToText.RecognizeModel = "ja-JP_BroadbandModel";
         _conversation = new Conversation(convo_credentials);
         _conversation.VersionDate = _conversationVersionDate;
+	_language_translator = new LanguageTranslator(lang_credentials);
         Active = true;
 
         StartRecording();
@@ -124,6 +135,21 @@ public class SpeechSandboxStreaming : MonoBehaviour
             Runnable.Stop(_recordingRoutine);
             _recordingRoutine = 0;
         }
+    }
+
+    private void Translate(string text)
+    {
+	Log.Debug("Translate()", "pre-translation: {0}", text);
+        _language_translator.GetTranslation(OnTranslate, OnFail, text, _translationModel);
+
+
+    }
+
+    private void OnTranslate(Translations response, Dictionary<string, object> customData)
+    {
+        string RetField = response.translations[0].translation;
+	Log.Debug("OnTranslate()", "post-translation: {0}" , RetField);
+        _conversation.Message(OnMessage, OnFail, convo_workspaceId, RetField);
     }
 
     private void OnError(string error)
@@ -183,7 +209,7 @@ public class SpeechSandboxStreaming : MonoBehaviour
             }
             else
             {
-                // calculate the number of samples remaining until we ready for a block of audio, 
+                // calculate the number of samples remaining until we ready for a block of audio,
                 // and wait that amount of time it will take to record.
                 int remaining = bFirstBlock ? (midPoint - writePos) : (_recording.samples - writePos);
                 float timeRemaining = (float)remaining / (float)_recordingHZ;
@@ -208,7 +234,7 @@ public class SpeechSandboxStreaming : MonoBehaviour
                     {
                         string text = alt.transcript;
                         Debug.Log("Result: " + text + " Confidence: " + alt.confidence);
-                        _conversation.Message(OnMessage, OnFail, convo_workspaceId, text);
+			Translate(text);
                     }
                 }
 
